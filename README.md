@@ -1,77 +1,88 @@
 # Private Equity Fund Dashboard
 
-This repository contains a synthetic private equity dataset along with the Streamlit
-application that renders a manager / LP dashboard. The bulk of the data is stored in
-three CSV files under the repository root; a helper script keeps them in sync when the
-portfolio changes.
+## Overview
 
-## Data Files
+This project bundles a synthetic private-equity dataset with a Streamlit application that presents the portfolio from both the general partner and limited partner perspectives. The dashboard surfaces geography-aware exposure, valuation history, forward-looking projections, company-level diagnostics, and capital deployment analytics. Supporting scripts keep the CSV inputs up to date, backfill valuation curves, and stage investor capital call schedules.
 
-| File | Purpose | Key Columns |
-|------|---------|-------------|
-| `company_profiles_150.csv` | Master list of portfolio companies. | `Company` (unique name), `Industry`, `Country` |
-| `PE_Fund_timeline.csv` | One row per acquisition. Tracks historic valuations and invested capital. | `Acquisition_Month`, `Company`, `Ownership_Percentage`, `Investment_Cost`, `Fund_Size_at_Acquisition`, `Valuation_of_company`, `Valuation_<YEAR>` columns for 2005-2025 |
-| `synthetic_financial_data_150_companies.csv` | Monthly operating metrics for each company. | `Company`, `Month`, `Revenue`, `Net_Income`, `Assets`, `Equity`, `ROE_%`, etc. |
+## Quick Start
 
-All numeric columns are stored as plain numbers (no thousands separators). The timeline
-file keeps prior acquisitions even if a holding is divested—rows are preserved and their
-valuation fields are zeroed. The `Valuation_<YEAR>` columns are used to produce NAV
-history, while `Valuation_of_company` mirrors the latest year.
+1. Activate your Python environment (Python 3.10+ recommended) and install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Launch the Streamlit experience from the project root:
+   ```bash
+   streamlit run dashboard.py
+   ```
+3. Optionally seed the CSVs with the latest synthetic refresh before starting Streamlit:
+   ```bash
+   python update_portfolio.py
+   ```
 
-## Application Structure
+All data files are expected to reside in the repository root alongside the application scripts.
 
-- `dashboard.py` – Streamlit app that loads the CSVs, applies sidebar filters, and renders
-  three tabs (Manager View, Investor View, Company Drilldown). Notable components:
-  - `load_*` helpers cache the CSVs.
-  - Derived metrics include NAV aggregation, deployment curves, and per-country summaries.
-  - Manager View features a pydeck choropleth using `GeoJsonLayer` to shade invested
-    countries and display key metrics.
+## Dashboard Features
 
-- `update_portfolio.py` – Script that removes divested companies and injects new holdings
-  across all CSVs. It assigns random investment sizes, generates consistent valuations,
-  and synthesizes 36 months of financials per company. Re-running the script is
-  idempotent: it strips previously generated records before appending fresh ones.
+### Global Controls & Data Handling
+- Sidebar multiselect filters narrow the portfolio by `Industry` and `Country`; every tab reuses the active subset.
+- `st.cache_data` backed loaders provide memoised access to the three core CSVs and the public country GeoJSON.
+- Helper utilities cleanse numeric columns, harmonise valuation year fields, and build a “latest month” snapshot by company.
 
-## Running the Dashboard
+### Manager View
+- KPI header summarises active holdings, cumulative deployed capital, latest fund NAV, and an estimated dry powder buffer.
+- Interactive `plotly` choropleth projects the fund’s global footprint, shading countries by current NAV and exposing company counts and invested dollars on hover.
+- Historical NAV chart shows valuation progression; a companion projection chart extrapolates base/bull/bear scenarios five years out using log-linear regression.
+- Industry performance bar chart ranks the latest average net income by sector for the filtered portfolio.
+- Risk Watchlist evaluates leverage, profitability, and valuation momentum to score companies (`compute_company_risk`) and surfaces both a bar chart and detailed table.
+- Follow-On Opportunities blends growth, margin, and leverage inputs (`compute_follow_on_candidates`) to highlight high potential reinvestment targets with a color-coded bar chart.
+- ROE leaderboard tables celebrate the top and bottom performers based on most recent `ROE_%` values.
 
-Install dependencies (Streamlit, pandas, numpy, plotly, pydeck):
+### Investor View
+- Capital deployment area chart visualises the cumulative investment curve derived from acquisition dates and costs.
+- Tabular NAV history exposes the trailing ten valuation points to support LP reporting.
+- Latest valuation snapshot lists the top holdings for the most recent valuation year, easing “what’s driving NAV today?” conversations.
 
-```bash
-pip install -r requirements.txt  # or install the libraries individually
-```
+### Company Drilldown
+- Single company selector reveals the most recent financial and return metrics for any holding, including revenue, net income, margin, ROE/ROA, and leverage ratios.
 
-Launch the dashboard:
+## Data Assets
 
-```bash
-streamlit run dashboard.py
-```
+| File | Description | Selected Columns |
+|------|-------------|------------------|
+| `company_profiles_150.csv` | Master entity registry for 150 portfolio companies. | `Company`, `Industry`, `Country` |
+| `PE_Fund_timeline.csv` | Acquisition ledger with ownership and valuation history (2005‑2025). | `Acquisition_Month`, `Ownership_Percentage`, `Investment_Cost`, `Fund_Size_at_Acquisition`, `Valuation_of_company`, `Valuation_<YEAR>` |
+| `synthetic_financial_data_150_companies.csv` | Monthly operating statements and leverage metrics. | `Month`, `Revenue`, `Net_Income`, `Assets`, `Equity`, `ROE_%`, `Debt/Equity`, … |
+| `investor_capital_call_timeline.csv` | Generated capital-call detail by investor. | `Capital_Call_Date`, `Triggering_Investment`, `Investor`, `Investor_Contribution`, `Remaining_Commitment` |
 
-The app expects the three CSVs to live alongside `dashboard.py`. Any updates written by
-`update_portfolio.py` are picked up on the next Streamlit rerun.
+Numeric values are stored without thousands separators to simplify ingestion. Divested holdings remain in the timeline (valuations zeroed) so historical NAV stays intact.
 
-## Updating the Portfolio
+## Data Maintenance & Helper Scripts
 
-Whenever the simulated fund adds or exits companies, run:
+- `update_portfolio.py` – Removes predefined divested companies, injects 20 new holdings across Nigeria, Sudan, South Africa, Brazil, India, Pakistan, and Canada, synthesises consistent valuations, and writes 36 months of bespoke financials per addition.
+- `timeline_valuation.py` – Rebuilds the `Valuation_<YEAR>` columns by simulating year-over-year growth with industry- and country-specific shocks (2008 and 2020 included). Accepts optional CLI arguments for file paths and random seeds.
+- `investors.py` – Models 25 LP commitments, stages onboarding cohorts, and produces the detailed `investor_capital_call_timeline.csv`, including cumulative and remaining obligations per investor.
+- `file.py` – One-time factory that bootstraps the original 150-company dataset from a baseline Excel workbook and curated naming list. Useful when regenerating the entire synthetic universe.
+- `st_test.py` – Streamlit sandbox showcasing map styling patterns used in the portfolio dashboard.
 
-```bash
-python update_portfolio.py
-```
+Each script reads and writes files in-place at the project root. Always close the Streamlit session (or let it auto-refresh) after running a data mutation script so cached data is invalidated.
 
-The script will:
+## Typical Workflows
 
-1. Remove the three largest U.S. positions from the data and zero-out their valuations in
-   the timeline.
-2. Append 20 new companies (Nigeria, Sudan, South Africa, Brazil, India, Pakistan,
-   Canada) with acquisitions spread across Aug–Nov 2025 and investments between $10M–$100M.
-3. Generate monthly financial statements for the new holdings and update NAV figures.
+- **Refresh the synthetic portfolio:** `python update_portfolio.py` (optionally follow with `python timeline_valuation.py --seed 2025` for reproducible valuation curves).
+- **Generate a fresh LP capital-call schedule:** `python investors.py`; inspect the summary in `investors_out.txt` and load the CSV in Excel or the dashboard as needed.
+- **Operate the dashboard:** `streamlit run dashboard.py`, tweak sidebar filters, and explore the three tabs outlined above.
 
-After the script runs, restart Streamlit (or let it auto-rerun) to see the refreshed
-charts and map.
+## Repository Layout
 
-## Notes
+- `dashboard.py` – Primary Streamlit entry point wiring data ingestion, filtering logic, and tabbed visualisations.
+- `update_portfolio.py`, `timeline_valuation.py`, `investors.py`, `file.py` – Data engineering utilities described above.
+- `pages/` – Placeholder for optional multi-page Streamlit extensions.
+- `requirements.txt` – Minimal dependency specification for reproduction.
+- `*.csv` – Synthetic datasets consumed by the app and scripts.
 
-- The dataset is entirely synthetic and intended only for demonstration.
-- If you modify the CSV schema, keep the derived functions in `dashboard.py` in sync
-  (especially NAV aggregation and country summaries).
-- The world map uses a remote GeoJSON file; the app requires internet access to load it.
+## Notes & Customisation Tips
+
+- The dashboard pulls world geometries from `https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson`; ensure outbound internet access when rendering maps.
+- If you introduce new metrics or columns, update helper functions such as `clean_numeric`, `valuation_columns`, and downstream visualisations to recognise them.
+- When integrating real data, revisit the pseudo-random assumptions in the maintenance scripts to avoid overwriting source-of-truth values.
 
